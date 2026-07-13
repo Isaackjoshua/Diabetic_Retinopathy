@@ -97,9 +97,16 @@ def _sens_spec(cm):
         fn = cm[c, :].sum() - tp
         fp = cm[:, c].sum() - tp
         tn = total - tp - fn - fp
+        sens = float(tp / (tp + fn)) if (tp + fn) else float("nan")   # recall
+        prec = float(tp / (tp + fp)) if (tp + fp) else float("nan")
+        f1 = (2 * prec * sens / (prec + sens)
+              if (prec == prec and sens == sens and (prec + sens) > 0) else float("nan"))
         out[c] = {
-            "sensitivity": float(tp / (tp + fn)) if (tp + fn) else float("nan"),
+            "sensitivity": sens,            # == recall
+            "recall": sens,
+            "precision": prec,
             "specificity": float(tn / (tn + fp)) if (tn + fp) else float("nan"),
+            "f1": f1,
             "support": int(tp + fn),
         }
     return out
@@ -149,8 +156,11 @@ def compute_metrics(y_true, y_prob, class_names=None, binary_op_point=0.5):
     # averaged only over classes that actually occur in y_true (support > 0).
     sens = [v["sensitivity"] for v in res["per_class"].values() if v["support"] > 0]
     spec = [v["specificity"] for v in res["per_class"].values() if v["support"] > 0]
-    res["macro_sensitivity"] = float(np.nanmean(sens)) if sens else float("nan")
+    prec = [v["precision"] for v in res["per_class"].values() if v["support"] > 0]
+    res["macro_sensitivity"] = float(np.nanmean(sens)) if sens else float("nan")   # == macro recall
+    res["macro_recall"] = res["macro_sensitivity"]
     res["macro_specificity"] = float(np.nanmean(spec)) if spec else float("nan")
+    res["macro_precision"] = float(np.nanmean(prec)) if prec else float("nan")
 
     # ---- derived BINARY referable DR (R2+) ----
     b_true = (y_true >= REFERABLE_FROM).astype(int)
