@@ -11,6 +11,9 @@ The notebook orchestrates these; keeping them here lets us smoke-test without
 running the notebook and keeps the join/recipe auditable.
 """
 import os
+# Reduce CUDA fragmentation (set before the caching allocator initialises, i.e. before
+# the first CUDA op). Honoured as long as dr_train is imported before any model.to(cuda).
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 import sys
 import types
 import argparse
