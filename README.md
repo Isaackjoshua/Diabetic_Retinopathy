@@ -36,8 +36,13 @@ jupyter lab evaluation/DR_evaluation.ipynb
 | `outputs/dr_imagefolder/` | `train|val|test/<class>/` symlinks; names `pid_eye_orig` preserve provenance |
 | `outputs/dr_imagefolder_cache/` | same layout, images resized to short-side 512 (training speed cache; notebook's default `data_path`) |
 | `outputs/class_mapping.json` | `R0_no_dr=0, R1_mild=1, R2_moderate_severe=2, R3_proliferative=3` |
-| `RETFound_DR_finetune.ipynb` | Phase 4 training + Phase 5 evaluation notebook |
-| `evaluation/DR_evaluation.ipynb` | standalone eval of the fine-tuned checkpoint: precision/recall/sensitivity/specificity/F1/AUROC/AUPRC/QWK, confusion matrices, ROC+PR curves, per-class bars, operating-point sweep → `evaluation/results/` |
+| `RETFound_DR_finetune.ipynb` | baseline training + evaluation notebook (224px, weighted-CE, QWK selection) |
+| `experiment01.ipynb` | Experiment 01 training: 384px + focal loss (γ=2) + checkpoint selection by macro-sensitivity → `outputs/experiment01/` |
+| `evaluation/DR_evaluation.ipynb` | standalone eval of the **baseline** checkpoint |
+| `evaluation/experiment01_evaluation.ipynb` | standalone eval of the **experiment 01** checkpoint |
+| `pipeline/dr_losses.py` | `FocalLoss` (multi-class, α-weighted) used by experiment 01 |
+
+Evaluation notebooks report precision/recall/sensitivity/specificity/F1/AUROC/AUPRC/QWK, confusion matrices, ROC+PR curves, per-class bars, and a referable-DR operating-point sweep (→ each notebook's `evaluation/results*/`).
 | `pipeline/common.py` | shared constants + laterality/label helpers |
 | `pipeline/dr_train.py` | wrappers that **import** RETFound's real model / lr_decay / datasets / engine |
 | `pipeline/dr_eval.py` | Phase 5 metrics + eye/patient aggregation + ROC/PR/confusion plots |
