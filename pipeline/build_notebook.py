@@ -176,12 +176,14 @@ from sklearn.metrics import cohen_kappa_score, roc_auc_score
 
 def val_scores():
     y, p = E.predict(model, dl_va, device)
-    qwk = cohen_kappa_score(y, p.argmax(1), weights="quadratic", labels=list(range(CONFIG["nb_classes"])))
+    pred = p.argmax(1)
+    qwk = cohen_kappa_score(y, pred, weights="quadratic", labels=list(range(CONFIG["nb_classes"])))
     try:
         yoh = np.eye(CONFIG["nb_classes"])[y]; cols = [c for c in range(CONFIG["nb_classes"]) if yoh[:,c].sum()>0]
         auroc = roc_auc_score(yoh[:,cols], p[:,cols], average="macro", multi_class="ovr")
     except Exception: auroc = float("nan")
-    return float(qwk), float(auroc)
+    msens, mspec = E.macro_sens_spec(y, pred)   # macro sensitivity / specificity
+    return float(qwk), float(auroc), msens, mspec
 
 best_score, best_epoch, best_state, history = -1.0, -1, None, []
 ckpt_path = os.path.join(CONFIG["output_dir"], "checkpoint-best.pth")
@@ -189,17 +191,21 @@ t0 = time.time()
 for epoch in range(CONFIG["epochs"]):
     tr = train_one_epoch(model, criterion, dl_tr, optimizer, device, epoch,
                          loss_scaler, args.clip_grad, None, None, args)
-    qwk, auroc = val_scores()
+    qwk, auroc, msens, mspec = val_scores()
     score = qwk if SELECTION_METRIC == "qwk" else auroc
-    history.append({"epoch": epoch, "train_loss": tr["loss"], "val_qwk": qwk, "val_macro_auroc": auroc})
+    history.append({"epoch": epoch, "train_loss": tr["loss"], "val_qwk": qwk,
+                    "val_macro_auroc": auroc, "val_macro_sensitivity": msens,
+                    "val_macro_specificity": mspec})
     tag = ""
     if score > best_score:
         best_score, best_epoch = score, epoch
         best_state = copy.deepcopy(model.state_dict())
-        torch.save({"model": best_state, "epoch": epoch, "config": CONFIG,
-                    "val_qwk": qwk, "val_macro_auroc": auroc}, ckpt_path)
+        torch.save({"model": best_state, "epoch": epoch, "config": CONFIG, "val_qwk": qwk,
+                    "val_macro_auroc": auroc, "val_macro_sensitivity": msens,
+                    "val_macro_specificity": mspec}, ckpt_path)
         tag = "  <-- best"
-    print(f"epoch {epoch:02d}  train_loss={tr['loss']:.4f}  val_QWK={qwk:.4f}  val_AUROC={auroc:.4f}{tag}")
+    print(f"epoch {epoch:02d}  train_loss={tr['loss']:.4f}  val_QWK={qwk:.4f}  "
+          f"val_AUROC={auroc:.4f}  val_mSens={msens:.4f}  val_mSpec={mspec:.4f}{tag}")
 json.dump(history, open(os.path.join(CONFIG["output_dir"], "history.json"), "w"), indent=2)
 print(f"\nDone in {(time.time()-t0)/60:.1f} min. Best epoch {best_epoch}  {SELECTION_METRIC}={best_score:.4f}")
 """)
@@ -210,9 +216,12 @@ import matplotlib.pyplot as plt
 h = history
 fig, ax = plt.subplots(1, 2, figsize=(11, 4))
 ax[0].plot([x["epoch"] for x in h], [x["train_loss"] for x in h]); ax[0].set_title("train loss"); ax[0].set_xlabel("epoch")
-ax[1].plot([x["epoch"] for x in h], [x["val_qwk"] for x in h], label="val QWK")
-ax[1].plot([x["epoch"] for x in h], [x["val_macro_auroc"] for x in h], label="val macro-AUROC")
-ax[1].axvline(best_epoch, ls="--", c="grey"); ax[1].legend(); ax[1].set_title("validation"); ax[1].set_xlabel("epoch")
+ep = [x["epoch"] for x in h]
+ax[1].plot(ep, [x["val_qwk"] for x in h], label="QWK")
+ax[1].plot(ep, [x["val_macro_auroc"] for x in h], label="macro-AUROC")
+ax[1].plot(ep, [x["val_macro_sensitivity"] for x in h], label="macro-sensitivity")
+ax[1].plot(ep, [x["val_macro_specificity"] for x in h], label="macro-specificity")
+ax[1].axvline(best_epoch, ls="--", c="grey"); ax[1].legend(fontsize=8); ax[1].set_title("validation"); ax[1].set_xlabel("epoch")
 fig.tight_layout(); plt.show()
 """)
 
@@ -243,6 +252,7 @@ def show(level):
     print(f"\n===== {level.upper()} (n={r['n']}) =====")
     print(f"  QWK={r['qwk']:.4f}  macroAUROC={r['macro_auroc_ovr']:.4f}  macroAUPRC={r['macro_auprc']:.4f}  "
           f"macroF1={r['macro_f1']:.4f}  acc={r['accuracy']:.4f}")
+    print(f"  macro sensitivity={r['macro_sensitivity']:.4f}  macro specificity={r['macro_specificity']:.4f}")
     print("  per-class sens/spec:", {k: (round(v['sensitivity'],3), round(v['specificity'],3), v['support'])
                                      for k, v in r['per_class'].items()})
     if "auroc" in b:

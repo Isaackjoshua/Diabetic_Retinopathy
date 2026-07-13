@@ -105,6 +105,17 @@ def _sens_spec(cm):
     return out
 
 
+def macro_sens_spec(y_true, y_pred):
+    """(macro_sensitivity, macro_specificity) over classes present in y_true."""
+    cm = confusion_matrix(np.asarray(y_true).astype(int), np.asarray(y_pred).astype(int),
+                          labels=list(range(N_CLASSES)))
+    ss = _sens_spec(cm)
+    sens = [v["sensitivity"] for v in ss.values() if v["support"] > 0]
+    spec = [v["specificity"] for v in ss.values() if v["support"] > 0]
+    return (float(np.nanmean(sens)) if sens else float("nan"),
+            float(np.nanmean(spec)) if spec else float("nan"))
+
+
 def compute_metrics(y_true, y_prob, class_names=None, binary_op_point=0.5):
     """Full metric bundle for one aggregation level."""
     y_true = np.asarray(y_true).astype(int)
@@ -134,6 +145,12 @@ def compute_metrics(y_true, y_prob, class_names=None, binary_op_point=0.5):
     cm = confusion_matrix(y_true, y_pred, labels=labels)
     res["confusion_matrix"] = cm.tolist()
     res["per_class"] = _sens_spec(cm)
+    # macro sensitivity / specificity = unweighted mean of per-class values,
+    # averaged only over classes that actually occur in y_true (support > 0).
+    sens = [v["sensitivity"] for v in res["per_class"].values() if v["support"] > 0]
+    spec = [v["specificity"] for v in res["per_class"].values() if v["support"] > 0]
+    res["macro_sensitivity"] = float(np.nanmean(sens)) if sens else float("nan")
+    res["macro_specificity"] = float(np.nanmean(spec)) if spec else float("nan")
 
     # ---- derived BINARY referable DR (R2+) ----
     b_true = (y_true >= REFERABLE_FROM).astype(int)
