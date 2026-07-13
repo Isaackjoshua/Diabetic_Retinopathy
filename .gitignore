@@ -11,8 +11,9 @@ outputs/manifest.csv
 outputs/dr_imagefolder/
 outputs/dr_imagefolder_cache/
 
-# ===== Derived / large training artifacts =====
+# ===== Derived / large training + evaluation artifacts =====
 outputs/train_run/
+evaluation/results/
 *.pth
 *.pt
 *.ckpt

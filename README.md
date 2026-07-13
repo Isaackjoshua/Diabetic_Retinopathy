@@ -22,8 +22,10 @@ python pipeline/build_manifest.py          # Phase 0 report + Phase 1 manifest  
 python pipeline/make_split.py              # Phase 2 patient-level stratified split (writes split into manifest)
 python pipeline/materialize_imagefolder.py # Phase 3 symlinked ImageFolder -> outputs/dr_imagefolder/, class_mapping.json
 python pipeline/build_resized_cache.py     # speed cache: short-side 512 copies -> outputs/dr_imagefolder_cache/ (~30x faster decode)
-# Phase 4/5: run the notebook (needs gated HF weights + login)
+# Phase 4/5: train (needs gated HF weights + login)
 jupyter lab RETFound_DR_finetune.ipynb
+# Evaluation: full metrics report on the fine-tuned checkpoint (no HF access needed)
+jupyter lab evaluation/DR_evaluation.ipynb
 ```
 
 ## Files
@@ -35,6 +37,7 @@ jupyter lab RETFound_DR_finetune.ipynb
 | `outputs/dr_imagefolder_cache/` | same layout, images resized to short-side 512 (training speed cache; notebook's default `data_path`) |
 | `outputs/class_mapping.json` | `R0_no_dr=0, R1_mild=1, R2_moderate_severe=2, R3_proliferative=3` |
 | `RETFound_DR_finetune.ipynb` | Phase 4 training + Phase 5 evaluation notebook |
+| `evaluation/DR_evaluation.ipynb` | standalone eval of the fine-tuned checkpoint: precision/recall/sensitivity/specificity/F1/AUROC/AUPRC/QWK, confusion matrices, ROC+PR curves, per-class bars, operating-point sweep → `evaluation/results/` |
 | `pipeline/common.py` | shared constants + laterality/label helpers |
 | `pipeline/dr_train.py` | wrappers that **import** RETFound's real model / lr_decay / datasets / engine |
 | `pipeline/dr_eval.py` | Phase 5 metrics + eye/patient aggregation + ROC/PR/confusion plots |
