@@ -1,0 +1,42 @@
+# ===== PATIENT DATA — PII, never commit =====
+# Image filenames and the spreadsheet contain patient names + dates of birth.
+Diabetic Retinopathy IMAGES 2/
+*.xlsx
+*.xls
+# LibreOffice/Excel lock files
+.~lock.*#
+# manifest holds image paths with patient names
+outputs/manifest.csv
+# symlink names / resized copies encode patient names + images
+outputs/dr_imagefolder/
+outputs/dr_imagefolder_cache/
+
+# ===== Derived / large training artifacts =====
+outputs/train_run/
+*.pth
+*.pt
+*.ckpt
+
+# ===== Cloned upstream repo (re-clone via the notebook) =====
+RETFound_repo/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# ===== Misc =====
+.DS_Store
+# macOS AppleDouble junk
+._*
+*.log
+.vscode/
+.idea/
+
+# ===== Kept intentionally (safe, PII-free): =====
+# pipeline/*.py, RETFound_DR_finetune.ipynb, README.md,
+# DATA_REPORT.md (numeric ids only, no names), outputs/class_mapping.json

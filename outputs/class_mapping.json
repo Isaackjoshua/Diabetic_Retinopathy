@@ -1,0 +1,15 @@
+{
+  "ordinal_class_to_index": {
+    "R0_no_dr": 0,
+    "R1_mild": 1,
+    "R2_moderate_severe": 2,
+    "R3_proliferative": 3
+  },
+  "index_to_class": {
+    "0": "R0_no_dr",
+    "1": "R1_mild",
+    "2": "R2_moderate_severe",
+    "3": "R3_proliferative"
+  },
+  "note": "R3A and R3S collapsed into R3_proliferative"
+}
