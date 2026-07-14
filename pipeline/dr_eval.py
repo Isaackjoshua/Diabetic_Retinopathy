@@ -24,20 +24,42 @@ REFERABLE_FROM = 2  # grades >= 2 are referable
 
 
 # ---------------------------------------------------------------- prediction
+# Test-time augmentation ops on already-normalised tensor batches (B,C,H,W).
+# Flips are label-preserving for fundus images (no orientation-encoded text).
+_TTA_OPS = {
+    "identity": lambda x: x,
+    "hflip": lambda x: torch.flip(x, dims=[3]),
+    "vflip": lambda x: torch.flip(x, dims=[2]),
+    "hvflip": lambda x: torch.flip(x, dims=[2, 3]),
+}
+
+
 @torch.no_grad()
-def predict(model, loader, device, amp=True):
+def predict(model, loader, device, amp=True, tta=None):
     """Return (y_true, y_prob) in loader (== dataset.samples) order.
 
     Loader MUST use a non-shuffling sampler so predictions align with
     loader.dataset.samples for eye/patient aggregation.
+
+    tta: None/[] or list of view names from _TTA_OPS. When given, the softmax
+    is averaged over the augmented views (test-time augmentation). Default
+    single-view "identity" -> identical to no TTA.
     """
+    views = list(tta) if tta else ["identity"]
+    for v in views:
+        if v not in _TTA_OPS:
+            raise ValueError(f"unknown TTA view '{v}'; choose from {list(_TTA_OPS)}")
     model.eval()
     ys, ps = [], []
     for batch in loader:
         images, target = batch[0].to(device, non_blocking=True), batch[-1]
-        with torch.cuda.amp.autocast(enabled=amp):
-            out = model(images)
-        prob = F.softmax(out.float(), dim=1)
+        prob = None
+        for v in views:
+            with torch.cuda.amp.autocast(enabled=amp):
+                out = model(_TTA_OPS[v](images))
+            p = F.softmax(out.float(), dim=1)
+            prob = p if prob is None else prob + p
+        prob = prob / len(views)
         ps.append(prob.cpu().numpy())
         ys.append(target.numpy())
     return np.concatenate(ys), np.concatenate(ps)

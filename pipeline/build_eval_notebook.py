@@ -52,6 +52,11 @@ CKPT = os.path.join(PROJECT, "outputs", "{ckpt_subdir}", "checkpoint-best.pth")
 assert os.path.exists(CKPT), f"missing {{CKPT}} -- run {prereq_nb} first"
 RESULTS = os.path.join(PROJECT, "evaluation", "{results_subdir}"); os.makedirs(RESULTS, exist_ok=True)
 CLASS_NAMES = ["R0", "R1", "R2", "R3"]; NC = 4
+
+# Test-time augmentation: softmax averaged over flip views. Measured effect on this
+# dataset is marginal (eye-level image averaging already reduces variance): the 4-view
+# set lifted QWK & referable-sensitivity slightly. Set to ["identity"] to disable.
+TTA_VIEWS = ["identity", "hflip", "vflip", "hvflip"]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device:", device)
 """)
@@ -86,9 +91,10 @@ print(f"loaded fine-tuned weights OK | input_size={INPUT} eval_batch={EVAL_BS}")
 (_, _, ds_te), (_, _, dl_te) = T.build_loaders(args, shuffle_train=False)
 assert ds_te.class_to_idx == json.load(open("outputs/class_mapping.json"))["ordinal_class_to_index"]
 test_paths = [p for p, _ in ds_te.samples]
-y_true, y_prob = E.predict(model, dl_te, device)
+y_true, y_prob = E.predict(model, dl_te, device, tta=TTA_VIEWS)   # softmax averaged over TTA views
 y_pred = y_prob.argmax(1)
-print(f"test images: {len(y_true)}  |  eyes: {len(set(E.parse_pid_eye(p) for p in test_paths))}")
+print(f"test images: {len(y_true)}  |  eyes: {len(set(E.parse_pid_eye(p) for p in test_paths))}"
+      f"  |  TTA views: {TTA_VIEWS}")
 """)
 
     code(r"""
@@ -243,6 +249,9 @@ op.round(4)
   k-fold CV for a firm estimate.
 - For screening, pick the operating point from the sweep above by the **sensitivity** you require for
   referable DR, and report the corresponding specificity/PPV — do not default to 0.5.
+- **Test-time augmentation** (`TTA_VIEWS`, top cell) averages softmax over flip views. On this dataset
+  the gain is marginal (eye-level image averaging already reduces variance); the 4-view set slightly
+  improved QWK and referable-sensitivity. Set `["identity"]` to disable and compare.
 - All figures and tables are saved under this notebook's results folder.
 """)
 

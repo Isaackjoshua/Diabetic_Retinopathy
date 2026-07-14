@@ -14,6 +14,7 @@ outputs/dr_imagefolder_cache/
 # ===== Derived / large training + evaluation artifacts =====
 outputs/train_run/
 outputs/experiment*/
+outputs/cv/
 evaluation/results/
 evaluation/results_*/
 *.pth

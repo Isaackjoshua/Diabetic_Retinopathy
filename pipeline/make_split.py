@@ -10,8 +10,9 @@ Run:  python pipeline/make_split.py
 """
 import os
 import sys
+import argparse
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common as C
@@ -21,7 +22,33 @@ TEST_FRAC = 0.15
 VAL_FRAC = 0.15  # of the whole
 
 
+def add_kfolds(m, u, kfolds):
+    """Assign each patient to a CV fold (patient-level, stratified on worst-eye grade)
+    and write a `fold` column (0..K-1) into the manifest. Group-safe by construction."""
+    pat = u.groupby("patient_id")["dr_label"].max().reset_index()
+    pat.columns = ["patient_id", "worst_grade"]
+    skf = StratifiedKFold(n_splits=kfolds, shuffle=True, random_state=SEED)
+    fold_of = {}
+    for f, (_, te_idx) in enumerate(skf.split(pat["patient_id"], pat["worst_grade"])):
+        for pid in pat.iloc[te_idx]["patient_id"]:
+            fold_of[pid] = f
+    # string dtype so non-usable rows can hold "" like the `split` column
+    m["fold"] = m["patient_id"].map(fold_of).apply(lambda x: "" if pd.isna(x) else str(int(x)))
+    m.to_csv(C.MANIFEST_PATH, index=False)
+    print(f"\n=== {kfolds}-fold CV assignment (patient-level, stratified) ===")
+    eyes = m[m["usable"] == True].drop_duplicates(["patient_id", "eye"])  # noqa: E712
+    print(pd.crosstab(eyes["fold"], eyes["dr_label"], margins=True).to_string())
+    assert (m.loc[m["usable"] == True, "fold"] == "").sum() == 0, "usable rows missing a fold"  # noqa: E712
+    print(f"Folds written to manifest 'fold' column (seed {SEED}).")
+
+
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--kfolds", type=int, default=0,
+                    help="If >0, ALSO write a patient-level stratified K-fold 'fold' column "
+                         "for cross-validation (does not change train/val/test).")
+    args = ap.parse_args()
+
     m = pd.read_csv(C.MANIFEST_PATH)
     u = m[m["usable"] == True].copy()  # noqa: E712
     u["dr_label"] = u["dr_label"].astype(int)
@@ -84,6 +111,12 @@ def main():
             print(f"[WARN] split '{sp}' has few minority eyes: {mins} -> metrics unstable; "
                   f"consider k-fold CV.")
     print("\nSplit persisted to manifest with seed", SEED)
+
+    if args.kfolds and args.kfolds > 1:
+        m2 = pd.read_csv(C.MANIFEST_PATH)
+        u2 = m2[m2["usable"] == True].copy()  # noqa: E712
+        u2["dr_label"] = u2["dr_label"].astype(int)
+        add_kfolds(m2, u2, args.kfolds)
 
 
 if __name__ == "__main__":

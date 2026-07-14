@@ -19,6 +19,8 @@ import types
 import argparse
 import numpy as np
 import torch
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True   # tolerate the one truncated source JPEG
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RETFOUND_REPO = os.environ.get("RETFOUND_REPO", os.path.join(PROJECT_ROOT, "RETFound_repo"))
@@ -121,15 +123,44 @@ def load_pretrained(model, args):
     return msg
 
 
-def build_loaders(args, shuffle_train=True):
-    """train/val/test loaders via RETFound's build_dataset (ImageFolder + transforms)."""
+def make_weighted_sampler(ds_train, nb_classes, minority_boost=None, seed=42):
+    """WeightedRandomSampler for class-balanced batches (oversamples rare grades).
+
+    Base per-sample weight = 1/class_count (so classes are seen ~equally). Optionally
+    multiply a class's weight by minority_boost[c] to oversample it *further* than balance
+    (e.g. {3: 2.0} to push R3 to 2x its balanced rate). NB: when using this sampler, use an
+    UN-weighted loss (gamma-only focal / plain CE) to avoid double-correcting imbalance.
+    """
+    import numpy as np
+    targets = np.array(ds_train.targets)
+    counts = np.array([(targets == c).sum() for c in range(nb_classes)], dtype=float)
+    counts = np.clip(counts, 1, None)
+    class_w = 1.0 / counts
+    if minority_boost:
+        for c, b in minority_boost.items():
+            class_w[c] *= b
+    sample_w = class_w[targets]
+    g = torch.Generator().manual_seed(seed)
+    sampler = torch.utils.data.WeightedRandomSampler(
+        weights=torch.as_tensor(sample_w, dtype=torch.double),
+        num_samples=len(targets), replacement=True, generator=g)
+    # expected per-class share of a drawn batch (for reporting)
+    exp_share = (class_w * counts); exp_share = exp_share / exp_share.sum()
+    return sampler, counts.astype(int), exp_share
+
+
+def build_loaders(args, shuffle_train=True, train_sampler=None):
+    """train/val/test loaders via RETFound's build_dataset (ImageFolder + transforms).
+
+    If train_sampler is given (e.g. WeightedRandomSampler), it overrides shuffle."""
     _ensure_repo_on_path()
     from util.datasets import build_dataset
     ds_tr = build_dataset(is_train="train", args=args)
     ds_va = build_dataset(is_train="val", args=args)
     ds_te = build_dataset(is_train="test", args=args)
     dl_tr = torch.utils.data.DataLoader(
-        ds_tr, batch_size=args.batch_size, shuffle=shuffle_train,
+        ds_tr, batch_size=args.batch_size,
+        shuffle=(shuffle_train and train_sampler is None), sampler=train_sampler,
         num_workers=args.num_workers, pin_memory=args.pin_mem, drop_last=True)
     dl_va = torch.utils.data.DataLoader(
         ds_va, batch_size=args.batch_size, shuffle=False,

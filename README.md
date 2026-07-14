@@ -38,8 +38,11 @@ jupyter lab evaluation/DR_evaluation.ipynb
 | `outputs/class_mapping.json` | `R0_no_dr=0, R1_mild=1, R2_moderate_severe=2, R3_proliferative=3` |
 | `RETFound_DR_finetune.ipynb` | baseline training + evaluation notebook (224px, weighted-CE, QWK selection) |
 | `experiment01.ipynb` | Experiment 01 training: 384px + focal loss (γ=2) + checkpoint selection by macro-sensitivity → `outputs/experiment01/` |
+| `experiment02.ipynb` | Experiment 02 training: exp01 + class-balanced WeightedRandomSampler (R2/R3 oversampling), α-weights off → `outputs/experiment02/` |
+| `pipeline/run_cv.py` | K-fold CV runner (`make_split.py --kfolds K` first); trains K models, aggregates eye-level metrics mean±std → `outputs/cv/cv_results.json` |
 | `evaluation/DR_evaluation.ipynb` | standalone eval of the **baseline** checkpoint |
 | `evaluation/experiment01_evaluation.ipynb` | standalone eval of the **experiment 01** checkpoint |
+| `evaluation/experiment02_evaluation.ipynb` | standalone eval of the **experiment 02** checkpoint |
 | `pipeline/dr_losses.py` | `FocalLoss` (multi-class, α-weighted) used by experiment 01 |
 
 Evaluation notebooks report precision/recall/sensitivity/specificity/F1/AUROC/AUPRC/QWK, confusion matrices, ROC+PR curves, per-class bars, and a referable-DR operating-point sweep (→ each notebook's `evaluation/results*/`).
