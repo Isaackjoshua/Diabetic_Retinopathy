@@ -11,12 +11,15 @@ import argparse
 import nbformat as nbf
 
 
-def build(title, ckpt_subdir, results_subdir, out_name, prereq_nb):
+def build(title, ckpt_subdir, results_subdir, out_name, prereq_nb, no_qwk=False):
     nb = nbf.v4.new_notebook()
     cells = []
     def md(s): cells.append(nbf.v4.new_markdown_cell(s.strip("\n")))
     def code(s): cells.append(nbf.v4.new_code_cell(s.strip("\n")))
 
+    _qwk_line = "" if no_qwk else "AUPRC, quadratic-weighted kappa (QWK), accuracy, "
+    if no_qwk:
+        _qwk_line = "AUPRC, accuracy (QWK intentionally omitted for this experiment), "
     md(f"""
 # {title}
 
@@ -26,7 +29,7 @@ any Hugging Face access once training is done.
 
 **Metrics** (at image, **eye** [primary], and patient [worst-eye] levels):
 precision, recall (= sensitivity), specificity, F1, **AUROC** (per-class OvR + macro),
-AUPRC, quadratic-weighted kappa (QWK), accuracy, full **confusion matrices**, plus the
+{_qwk_line}full **confusion matrices**, plus the
 binary **referable-DR (R2+)** view with an operating-point sweep.
 
 **Prerequisite:** run `{prereq_nb}` first so `outputs/{ckpt_subdir}/checkpoint-best.pth` exists.
@@ -57,6 +60,7 @@ CLASS_NAMES = ["R0", "R1", "R2", "R3"]; NC = 4
 # dataset is marginal (eye-level image averaging already reduces variance): the 4-view
 # set lifted QWK & referable-sensitivity slightly. Set to ["identity"] to disable.
 TTA_VIEWS = ["identity", "hflip", "vflip", "hvflip"]
+NO_QWK = {no_qwk}   # if True, QWK is dropped from the summary table and metrics.json
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device:", device)
 """)
@@ -66,7 +70,8 @@ print("device:", device)
 ckpt = torch.load(CKPT, map_location="cpu")
 cfg = ckpt.get("config", {})
 print("checkpoint from epoch", ckpt.get("epoch"),
-      "| val_QWK", round(ckpt.get("val_qwk", float('nan')), 4),
+      ("" if NO_QWK else f"| val_QWK {round(ckpt.get('val_qwk', float('nan')), 4)}"),
+      "| val_macro_AUROC", round(ckpt.get("val_macro_auroc", float('nan')), 4),
       "| val_macro_sens", round(ckpt.get("val_macro_sensitivity", float('nan')), 4))
 DATA_PATH = cfg.get("data_path", "outputs/dr_imagefolder_cache")
 INPUT = cfg.get("input_size", 224)
@@ -100,19 +105,24 @@ print(f"test images: {len(y_true)}  |  eyes: {len(set(E.parse_pid_eye(p) for p i
     code(r"""
 # ---- full metric bundle at image / eye / patient levels (saved to results/metrics.json) ----
 report = E.full_report(test_paths, y_true, y_prob, RESULTS)
+if NO_QWK:   # strip QWK from the saved artifact for this experiment
+    for _lv in report:
+        for _k in ("qwk", "kappa_unweighted"):
+            report[_lv].pop(_k, None)
+    json.dump(report, open(os.path.join(RESULTS, "metrics.json"), "w"), indent=2)
 
 rows = []
 for lvl in ["image_level", "eye_level", "patient_level"]:
     r = report[lvl]; b = r["binary_referable"]
-    rows.append({
-        "level": lvl.replace("_level", ""), "n": r["n"],
-        "QWK": r["qwk"], "accuracy": r["accuracy"],
-        "macro_AUROC": r["macro_auroc_ovr"], "macro_AUPRC": r["macro_auprc"],
-        "macro_precision": r["macro_precision"], "macro_recall(sens)": r["macro_sensitivity"],
-        "macro_specificity": r["macro_specificity"], "macro_F1": r["macro_f1"],
-        "referable_AUROC": b.get("auroc"), "referable_AUPRC": b.get("auprc"),
-        "referable_sens": b.get("sensitivity"), "referable_spec": b.get("specificity"),
-    })
+    row = {"level": lvl.replace("_level", ""), "n": r["n"], "accuracy": r["accuracy"],
+           "macro_AUROC": r["macro_auroc_ovr"], "macro_AUPRC": r["macro_auprc"],
+           "macro_precision": r["macro_precision"], "macro_recall(sens)": r["macro_sensitivity"],
+           "macro_specificity": r["macro_specificity"], "macro_F1": r["macro_f1"],
+           "referable_AUROC": b.get("auroc"), "referable_AUPRC": b.get("auprc"),
+           "referable_sens": b.get("sensitivity"), "referable_spec": b.get("specificity")}
+    if not NO_QWK:
+        row = {**{"level": row["level"], "n": row["n"], "QWK": r["qwk"]}, **row}
+    rows.append(row)
 summary = pd.DataFrame(rows).set_index("level")
 summary.to_csv(os.path.join(RESULTS, "summary_metrics.csv"))
 summary.round(4)
@@ -272,5 +282,6 @@ if __name__ == "__main__":
     ap.add_argument("--results-subdir", default="results")
     ap.add_argument("--out", default="DR_evaluation.ipynb")
     ap.add_argument("--prereq-nb", default="RETFound_DR_finetune.ipynb")
+    ap.add_argument("--no-qwk", action="store_true", help="omit QWK from the summary + metrics.json")
     a = ap.parse_args()
-    build(a.title, a.ckpt_subdir, a.results_subdir, a.out, a.prereq_nb)
+    build(a.title, a.ckpt_subdir, a.results_subdir, a.out, a.prereq_nb, no_qwk=a.no_qwk)

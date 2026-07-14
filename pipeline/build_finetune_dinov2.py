@@ -18,10 +18,11 @@ and selection metric — the ONLY change is the pretrained backbone:
 | backbone | RETFound **MAE** ViT-L/16 (`RETFound_mae_natureCFP`) | RETFound **DINOv2** ViT-L/14 (`RETFound_dinov2_meh`) |
 | checkpoint key | `model` | `teacher` |
 | input / patches | 224px / 16×16 | 224px / 16×16 (patch14; pos-embed interp 37×37→16×16) |
-| loss / selection | weighted CE / val QWK | weighted CE / val QWK *(same)* |
+| loss | weighted CE | weighted CE *(same)* |
+| selection metric | val QWK | **val macro-AUROC** (QWK intentionally not measured here) |
 
 Everything downstream (manifest, patient-level split, ImageFolder cache, 4-class ordinal
-R0–R3, macro-AUROC/QWK eval, referable-DR view) is shared with the baseline, so results are
+R0–R3, macro-AUROC eval, referable-DR view) is shared with the baseline, so results are
 directly comparable — this isolates the effect of the backbone.
 
 ### Verified laterality mapping (unchanged): OD=RIGHT=RE, OS=LEFT=LE; CSV Left/Right → LE/RE.
@@ -73,7 +74,7 @@ CONFIG = dict(
     output_dir = "outputs/finetune_dinov2",
     task = "dr_dinov2_224",
 )
-SELECTION_METRIC = "qwk"                          # validation quadratic-weighted kappa (as baseline)
+SELECTION_METRIC = "macro_auroc"                  # QWK intentionally NOT used in this experiment
 import os; os.makedirs(CONFIG["output_dir"], exist_ok=True)
 CONFIG
 """)
@@ -119,19 +120,18 @@ print(f"param groups: {len(optimizer.param_groups)} | base lr: {args.lr:.2e} | e
 """)
 
 code(r"""
-# ============================ training loop (select best by val QWK) ============================
-from sklearn.metrics import cohen_kappa_score, roc_auc_score
+# ============================ training loop (select best by val macro-AUROC; NO QWK) ============================
+from sklearn.metrics import roc_auc_score
 
 def val_scores():
     y, p = E.predict(model, dl_va, device)
     pred = p.argmax(1)
-    qwk = cohen_kappa_score(y, pred, weights="quadratic", labels=list(range(CONFIG["nb_classes"])))
     try:
         yoh = np.eye(CONFIG["nb_classes"])[y]; cols = [c for c in range(CONFIG["nb_classes"]) if yoh[:,c].sum()>0]
         auroc = roc_auc_score(yoh[:,cols], p[:,cols], average="macro", multi_class="ovr")
     except Exception: auroc = float("nan")
     msens, mspec = E.macro_sens_spec(y, pred)
-    return float(qwk), float(auroc), msens, mspec
+    return float(auroc), msens, mspec
 
 best_score, best_epoch, history = -1.0, -1, []
 ckpt_path = os.path.join(CONFIG["output_dir"], "checkpoint-best.pth")
@@ -139,18 +139,19 @@ t0 = time.time()
 for epoch in range(CONFIG["epochs"]):
     tr = train_one_epoch(model, criterion, dl_tr, optimizer, device, epoch,
                          loss_scaler, args.clip_grad, None, None, args)
-    qwk, auroc, msens, mspec = val_scores()
-    score = qwk if SELECTION_METRIC == "qwk" else auroc
-    history.append({"epoch": epoch, "train_loss": tr["loss"], "val_qwk": qwk, "val_macro_auroc": auroc,
+    auroc, msens, mspec = val_scores()
+    score = {"macro_auroc": auroc, "macro_sensitivity": msens,
+             "balanced": 0.5*(msens+mspec)}[SELECTION_METRIC]
+    history.append({"epoch": epoch, "train_loss": tr["loss"], "val_macro_auroc": auroc,
                     "val_macro_sensitivity": msens, "val_macro_specificity": mspec})
     tag = ""
     if score > best_score:
         best_score, best_epoch = score, epoch
         torch.save({"model": copy.deepcopy(model.state_dict()), "epoch": epoch, "config": CONFIG,
-                    "val_qwk": qwk, "val_macro_auroc": auroc, "val_macro_sensitivity": msens,
+                    "val_macro_auroc": auroc, "val_macro_sensitivity": msens,
                     "val_macro_specificity": mspec}, ckpt_path)
         tag = "  <-- best"
-    print(f"epoch {epoch:02d}  loss={tr['loss']:.4f}  val_QWK={qwk:.4f}  AUROC={auroc:.4f}  "
+    print(f"epoch {epoch:02d}  loss={tr['loss']:.4f}  val_AUROC={auroc:.4f}  "
           f"mSens={msens:.4f}  mSpec={mspec:.4f}{tag}")
 json.dump(history, open(os.path.join(CONFIG["output_dir"], "history.json"), "w"), indent=2)
 print(f"\nDone in {(time.time()-t0)/60:.1f} min. Best epoch {best_epoch}  {SELECTION_METRIC}={best_score:.4f}")
@@ -162,7 +163,7 @@ import matplotlib.pyplot as plt
 h = history; ep = [x["epoch"] for x in h]
 fig, ax = plt.subplots(1, 2, figsize=(11, 4))
 ax[0].plot(ep, [x["train_loss"] for x in h]); ax[0].set_title("train loss"); ax[0].set_xlabel("epoch")
-for k, lab in [("val_qwk","QWK"),("val_macro_auroc","macro-AUROC"),
+for k, lab in [("val_macro_auroc","macro-AUROC"),
                ("val_macro_sensitivity","macro-sensitivity"),("val_macro_specificity","macro-specificity")]:
     ax[1].plot(ep, [x[k] for x in h], label=lab)
 ax[1].axvline(best_epoch, ls="--", c="grey"); ax[1].legend(fontsize=8)
@@ -173,19 +174,20 @@ fig.tight_layout(); plt.show()
 md(r"""
 ## Evaluation on TEST + comparison to the MAE baseline
 Full eval below (image/eye/patient + referable-DR). Compare eye-level against the
-RETFound-MAE baseline (QWK 0.745, macro-AUROC 0.888, macro-sens 0.657, referable AUROC 0.965).
+RETFound-MAE baseline (macro-AUROC 0.888, macro-sens 0.657, referable AUROC 0.965). QWK is
+not reported for this experiment.
 """)
 
 code(r"""
 # ============================ evaluate on TEST (best checkpoint) ============================
 best = torch.load(ckpt_path, map_location="cpu")
 model.load_state_dict(best["model"]); model.to(device)
-print(f"Best epoch {best['epoch']} | val_QWK {best['val_qwk']:.4f}")
+print(f"Best epoch {best['epoch']} | val_macroAUROC {best['val_macro_auroc']:.4f}")
 test_paths = [p for p, _ in ds_te.samples]
 y_true, y_prob = E.predict(model, dl_te, device)
 rep = E.full_report(test_paths, y_true, y_prob, os.path.join(CONFIG["output_dir"], "eval_test"))
 r = rep["eye_level"]; b = r["binary_referable"]
-print(f"\nEYE-LEVEL (n={r['n']}): QWK={r['qwk']:.4f}  macroAUROC={r['macro_auroc_ovr']:.4f}  "
+print(f"\nEYE-LEVEL (n={r['n']}): macroAUROC={r['macro_auroc_ovr']:.4f}  "
       f"macro_sens={r['macro_sensitivity']:.4f}  macro_spec={r['macro_specificity']:.4f}  acc={r['accuracy']:.4f}")
 print("per-class sens/spec:", {['R0','R1','R2','R3'][k]: (round(v['sensitivity'],3), round(v['specificity'],3))
                                for k, v in r['per_class'].items()})
