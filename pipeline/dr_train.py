@@ -38,8 +38,8 @@ def make_args(cfg):
     a.data_path = cfg["data_path"]
     a.nb_classes = cfg["nb_classes"]
     a.input_size = cfg["input_size"]
-    a.model = "RETFound_mae"
-    a.model_arch = "retfound_mae"
+    a.model = cfg.get("model", "RETFound_mae")          # "RETFound_mae" | "RETFound_dinov2"
+    a.model_arch = cfg.get("model_arch", "retfound_mae")
     a.finetune = cfg["finetune_id"]
     a.drop_path = cfg["drop_path"]
     a.global_pool = True
@@ -86,15 +86,25 @@ def set_seed(seed):
 
 
 def build_model_arch(args):
-    """ViT-L via models_vit (random init). Separated so we can smoke-test w/o gated weights."""
+    """Build the ViT-L backbone via models_vit, per args.model (mirrors main_finetune.py).
+    RETFound_mae -> random-init MAE ViT-L (weights loaded later via load_pretrained).
+    RETFound_dinov2 -> timm DINOv2 ViT-L/14 (its base weights load here; RETFound teacher
+    weights are applied later in load_pretrained)."""
     _ensure_repo_on_path()
     import models_vit as models
-    model = models.__dict__["RETFound_mae"](
-        img_size=args.input_size,
-        num_classes=args.nb_classes,
-        drop_path_rate=args.drop_path,
-        global_pool=args.global_pool,
-    )
+    if args.model == "RETFound_mae":
+        model = models.__dict__[args.model](
+            img_size=args.input_size,
+            num_classes=args.nb_classes,
+            drop_path_rate=args.drop_path,
+            global_pool=args.global_pool,
+        )
+    else:  # RETFound_dinov2 (patch14, img_size fixed at 224 inside the builder)
+        model = models.__dict__[args.model](
+            num_classes=args.nb_classes,
+            drop_path_rate=args.drop_path,
+            args=args,
+        )
     return model
 
 
@@ -108,7 +118,8 @@ def load_pretrained(model, args):
     ckpt_path = hf_hub_download(repo_id=f"YukunZhou/{args.finetune}",
                                 filename=f"{args.finetune}.pth")
     checkpoint = torch.load(ckpt_path, map_location="cpu")
-    checkpoint_model = checkpoint["model"]
+    # MAE checkpoint stores weights under "model"; DINOv2 under "teacher"
+    checkpoint_model = checkpoint["teacher"] if args.model == "RETFound_dinov2" else checkpoint["model"]
     checkpoint_model = {k.replace("backbone.", ""): v for k, v in checkpoint_model.items()}
     checkpoint_model = {k.replace("mlp.w12.", "mlp.fc1."): v for k, v in checkpoint_model.items()}
     checkpoint_model = {k.replace("mlp.w3.", "mlp.fc2."): v for k, v in checkpoint_model.items()}

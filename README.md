@@ -39,6 +39,8 @@ jupyter lab evaluation/DR_evaluation.ipynb
 | `RETFound_DR_finetune.ipynb` | baseline training + evaluation notebook (224px, weighted-CE, QWK selection) |
 | `experiment01.ipynb` | Experiment 01 training: 384px + focal loss (γ=2) + checkpoint selection by macro-sensitivity → `outputs/experiment01/` |
 | `experiment02.ipynb` | Experiment 02 training: exp01 + class-balanced WeightedRandomSampler (R2/R3 oversampling), α-weights off → `outputs/experiment02/` |
+| `Finetune_DINOv2.ipynb` | Baseline recipe with the RETFound **DINOv2** ViT-L/14 backbone (`RETFound_dinov2_meh`) instead of MAE → `outputs/finetune_dinov2/` |
+| `evaluation/Finetune_DINOv2_evaluation.ipynb` | standalone eval of the DINOv2 checkpoint |
 | `pipeline/run_cv.py` | K-fold CV runner (`make_split.py --kfolds K` first); trains K models, aggregates eye-level metrics mean±std → `outputs/cv/cv_results.json` |
 | `evaluation/DR_evaluation.ipynb` | standalone eval of the **baseline** checkpoint |
 | `evaluation/experiment01_evaluation.ipynb` | standalone eval of the **experiment 01** checkpoint |
