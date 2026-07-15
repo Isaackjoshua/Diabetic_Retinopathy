@@ -41,11 +41,13 @@ jupyter lab evaluation/DR_evaluation.ipynb
 | `experiment02.ipynb` | Experiment 02 training: exp01 + class-balanced WeightedRandomSampler (R2/R3 oversampling), α-weights off → `outputs/experiment02/` |
 | `Finetune_DINOv2.ipynb` | Baseline recipe with the RETFound **DINOv2** ViT-L/14 backbone (`RETFound_dinov2_meh`) instead of MAE → `outputs/finetune_dinov2/` |
 | `evaluation/Finetune_DINOv2_evaluation.ipynb` | standalone eval of the DINOv2 checkpoint |
-| `pipeline/run_cv.py` | K-fold CV runner (`make_split.py --kfolds K` first); trains K models, aggregates eye-level metrics mean±std → `outputs/cv/cv_results.json` |
+| `experiment03.ipynb` | Experiment 03: DINOv2 + **logit-adjusted loss** (Menon et al.) targeting **macro-sensitivity > 0.80**; Section A single-split sanity check → `outputs/experiment03/`, Section B **5-fold CV with pooled out-of-fold macro-sensitivity + bootstrap 95% CI** (the honest number) |
+| `evaluation/experiment03_evaluation.ipynb` | standalone eval of the experiment 03 checkpoint |
+| `pipeline/run_cv.py` | K-fold CV runner (`make_split.py --kfolds K` first); trains K models, aggregates eye-level metrics mean±std **and pooled-OOF macro-sensitivity with bootstrap 95% CI** → `outputs/cv/cv_results.json`. Flags: `--backbone {mae,dinov2}`, `--loss {focal,logit_adjusted}`, `--la-tau`, `--use-sampler`, `--tta` |
 | `evaluation/DR_evaluation.ipynb` | standalone eval of the **baseline** checkpoint |
 | `evaluation/experiment01_evaluation.ipynb` | standalone eval of the **experiment 01** checkpoint |
 | `evaluation/experiment02_evaluation.ipynb` | standalone eval of the **experiment 02** checkpoint |
-| `pipeline/dr_losses.py` | `FocalLoss` (multi-class, α-weighted) used by experiment 01 |
+| `pipeline/dr_losses.py` | `FocalLoss` (exp01, multi-class α-weighted) + `LogitAdjustedLoss` (exp03, macro-recall objective) |
 
 Evaluation notebooks report precision/recall/sensitivity/specificity/F1/AUROC/AUPRC/QWK, confusion matrices, ROC+PR curves, per-class bars, and a referable-DR operating-point sweep (→ each notebook's `evaluation/results*/`).
 | `pipeline/common.py` | shared constants + laterality/label helpers |
