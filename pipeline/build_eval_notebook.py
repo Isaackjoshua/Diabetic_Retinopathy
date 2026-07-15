@@ -79,6 +79,11 @@ EVAL_BS = 32 if INPUT <= 224 else 12   # smaller batch for high-res eval
 
 args = T.make_args({**{
     "data_path": DATA_PATH, "nb_classes": NC, "input_size": INPUT,
+    # backbone is read from the checkpoint's stored config so the arch matches
+    # the weights (MAE patch16 vs DINOv2 patch14) -- otherwise load_state_dict
+    # fails on pos_embed / patch_embed shape mismatch.
+    "model": cfg.get("model", "RETFound_mae"),
+    "model_arch": cfg.get("model_arch", "retfound_mae"),
     "finetune_id": "", "drop_path": cfg.get("drop_path", 0.2),
     "batch_size": EVAL_BS, "accum_iter": 1, "epochs": 1, "warmup_epochs": 0,
     "blr": 5e-3, "layer_decay": 0.65, "weight_decay": 0.05, "min_lr": 1e-6,
