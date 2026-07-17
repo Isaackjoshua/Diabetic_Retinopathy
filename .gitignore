@@ -10,11 +10,15 @@ outputs/manifest.csv
 # symlink names / resized copies encode patient names + images
 outputs/dr_imagefolder/
 outputs/dr_imagefolder_cache/
+# external APTOS-2019 dataset (large; redistribute via Kaggle, not the repo)
+APTOS-2019/
+outputs/aptos_imagefolder/
 
 # ===== Derived / large training + evaluation artifacts =====
 outputs/train_run/
 outputs/experiment*/
 outputs/finetune_dinov2/
+outputs/outsource_finetune/
 outputs/cv/
 evaluation/results/
 evaluation/results_*/
@@ -24,6 +28,12 @@ evaluation/results_*/
 
 # ===== Cloned upstream repo (re-clone via the notebook) =====
 RETFound_repo/
+
+# ===== Local Claude Code settings (machine-specific) =====
+.claude/
+
+# ===== CV result backups (derived metrics/predictions, not source) =====
+outputs/cv_exp03_tau10_backup/
 
 # ===== Python =====
 __pycache__/

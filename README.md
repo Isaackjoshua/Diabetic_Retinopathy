@@ -43,6 +43,8 @@ jupyter lab evaluation/DR_evaluation.ipynb
 | `evaluation/Finetune_DINOv2_evaluation.ipynb` | standalone eval of the DINOv2 checkpoint |
 | `experiment03.ipynb` | Experiment 03: DINOv2 + **logit-adjusted loss** (Menon et al.) targeting **macro-sensitivity > 0.80**; Section A single-split sanity check → `outputs/experiment03/`, Section B **5-fold CV with pooled out-of-fold macro-sensitivity + bootstrap 95% CI** (the honest number) |
 | `evaluation/experiment03_evaluation.ipynb` | standalone eval of the experiment 03 checkpoint |
+| `Outsource-finetune.ipynb` | **External-data transfer** (option #1): two-phase DINOv2 — Phase 1 pre-fine-tune on APTOS-2019, Phase 2 fine-tune on local — to enrich rare grades → `outputs/outsource_finetune/` |
+| `pipeline/build_aptos_imagefolder.py` | maps APTOS-2019 ICDR 0-4 → local R0-R3 class indices, symlinks → `outputs/aptos_imagefolder/{train,val,test}/` |
 | `pipeline/run_cv.py` | K-fold CV runner (`make_split.py --kfolds K` first); trains K models, aggregates eye-level metrics mean±std **and pooled-OOF macro-sensitivity with bootstrap 95% CI** → `outputs/cv/cv_results.json`. Flags: `--backbone {mae,dinov2}`, `--loss {focal,logit_adjusted}`, `--la-tau`, `--use-sampler`, `--tta` |
 | `evaluation/DR_evaluation.ipynb` | standalone eval of the **baseline** checkpoint |
 | `evaluation/experiment01_evaluation.ipynb` | standalone eval of the **experiment 01** checkpoint |

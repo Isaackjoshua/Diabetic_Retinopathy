@@ -87,7 +87,14 @@ def train_one_fold(root, cfg, device):
         _ds = build_dataset(is_train="train", args=args)
         sampler, _, _ = T.make_weighted_sampler(_ds, cfg["nb_classes"], cfg.get("minority_boost"))
     (ds_tr, ds_va, ds_te), (dl_tr, dl_va, dl_te) = T.build_loaders(args, train_sampler=sampler)
-    model = T.build_model_arch(args); T.load_pretrained(model, args); model.to(device)
+    model = T.build_model_arch(args)
+    if cfg.get("init_ckpt"):                          # external-init (e.g. APTOS Phase-1 ckpt)
+        sd = torch.load(cfg["init_ckpt"], map_location="cpu")["model"]
+        m, u = model.load_state_dict(sd, strict=False)
+        print(f"  init from {cfg['init_ckpt']} (missing={len(m)} unexpected={len(u)})")
+    else:
+        T.load_pretrained(model, args)                # RETFound teacher weights
+    model.to(device)
     optimizer, scaler = T.build_optimizer(model, args)
     criterion = _build_criterion(cfg, ds_tr, device)
 
@@ -119,6 +126,8 @@ def main():
     ap.add_argument("--la-tau", type=float, default=1.0, help="logit-adjustment strength (loss=logit_adjusted)")
     ap.add_argument("--folds", default=None, help="comma list subset, e.g. 0,1")
     ap.add_argument("--tta", default=None, help="comma list of TTA views, e.g. identity,hflip,vflip,hvflip")
+    ap.add_argument("--init-ckpt", default=None,
+                    help="external init checkpoint (e.g. APTOS Phase-1); replaces RETFound teacher init")
     args = ap.parse_args()
 
     m = pd.read_csv(C.MANIFEST_PATH)
@@ -140,6 +149,7 @@ def main():
                batch_size=args.batch_size, accum_iter=args.accum_iter, epochs=args.epochs,
                warmup_epochs=max(1, args.epochs // 5), blr=5e-3, layer_decay=0.65, weight_decay=0.05,
                min_lr=1e-6, clip_grad=None, device="cuda", seed=42, num_workers=12,
+               init_ckpt=args.init_ckpt,
                tta=(args.tta.split(",") if args.tta else None), **bb)
     device = torch.device("cuda")
     folds = [int(x) for x in args.folds.split(",")] if args.folds else list(range(args.kfolds))
